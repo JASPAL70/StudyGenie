@@ -1,29 +1,30 @@
 const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
 const axios = require("axios");
+const cors = require("cors");
 
 const app = express();
-const PORT = 5000;
 
-// Middleware
+// ✅ Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json()); // replaces body-parser
 
-// POST route to forward plan request to FastAPI ML service
+// ✅ Route: Proxy to FastAPI
 app.post("/generate-plan", async (req, res) => {
   try {
-    const response = await axios.post("http://localhost:7000/ml/generate-plan", req.body);
+    const response = await axios.post("http://localhost:7000/generate-plan", req.body);
     res.json(response.data);
   } catch (error) {
-    console.error("🔴 Error communicating with ML service:", error.message);
-    res.status(500).json({
-      error: "Failed to generate plan. ML service might be down.",
-    });
+    console.error("❌ ML Service Error:", error.message);
+    res.status(500).json({ error: "ML service not responding." });
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`✅ Backend API running at http://localhost:${PORT}`);
+// ✅ Optional: Health check
+app.get("/", (req, res) => {
+  res.send("StudyGenie Node Proxy is running!");
+});
+
+// ✅ Start server
+app.listen(5000, () => {
+  console.log("🚀 Node.js backend running at http://localhost:5000");
 });

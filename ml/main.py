@@ -1,52 +1,62 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
 from datetime import datetime, timedelta
+import pandas as pd
+import random
 
 app = FastAPI()
 
-# Allow all origins (React & Node)
+# Enable CORS for local frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Request model
 class PlanRequest(BaseModel):
     goal: str
-    subjects: List[str]
+    subjects: list[str]
     hoursPerDay: int
-    targetDate: str  # YYYY-MM-DD
+    targetDate: str
+    planMode: str  # 'hours' or 'day'
 
-@app.post("/ml/generate-plan")
-def generate_plan(req: PlanRequest):
-    start_date = datetime.now().date()
-    end_date = datetime.strptime(req.targetDate, "%Y-%m-%d").date()
-    total_days = (end_date - start_date).days
+@app.post("/generate-plan")
+def generate_plan(data: PlanRequest):
+    subjects = data.subjects
+    hours_per_day = data.hoursPerDay
+    end_date = datetime.strptime(data.targetDate, "%Y-%m-%d")
+    start_date = datetime.today()
+    days = (end_date - start_date).days
 
-    if total_days < len(req.subjects):
-        return {"error": "Not enough days to cover all subjects"}
+    if days <= 0 or not subjects:
+        return {"error": "❌ Invalid target date or subject list."}
 
-    daily_plan = []
-    days_per_subject = total_days // len(req.subjects)
-    current_day = start_date
+    plan = []
+    all_subjects = []
 
-    for subject in req.subjects:
-        for _ in range(days_per_subject):
-            daily_plan.append({
-                "date": str(current_day),
-                "subject": subject,
-                "topic": f"Topic of {subject}",
-                "hours": req.hoursPerDay,
-                "status": "Pending"
-            })
-            current_day += timedelta(days=1)
+    for i in range(days):
+        today = start_date + timedelta(days=i)
+        selected = random.sample(subjects, k=min(len(subjects), 2))
+        day_plan = {
+            "date": today.strftime("%Y-%m-%d"),
+            "subjects": [{"name": s, "hours": round(hours_per_day / len(selected), 2)} for s in selected],
+            "status": "Pending",
+        }
+        plan.append(day_plan)
+        for s in selected:
+            all_subjects.append({"date": today, "subject": s, "hours": round(hours_per_day / len(selected), 2)})
 
+    # 🔍 Visualization using pandas
+    df = pd.DataFrame(all_subjects)
+    df_summary = df.groupby("subject")["hours"].sum().reset_index()
+
+    # Return both plan and visualization
     return {
-        "goal": req.goal,
-        "totalDays": total_days,
-        "plan": daily_plan
+        "plan": plan,
+        "visualization": {
+            "subject_hours": df_summary.to_dict(orient="records")
+        }
     }
